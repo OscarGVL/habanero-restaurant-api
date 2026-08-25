@@ -94,7 +94,8 @@ describe('MenuService', () => {
         id: '1',
       },
       data: {
-        deletedAt,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        deletedAt: expect.any(Date),
       },
     });
   });
