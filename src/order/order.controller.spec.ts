@@ -1,9 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
+import { OrderStatus } from '../../generated/prisma/client';
 
 describe('OrderController', () => {
   let controller: OrderController;
+
+  const orderServiceMock = {
+    createOrder: jest.fn(),
+    getOrderById: jest.fn(),
+    getOrders: jest.fn(),
+    updateOrderStatus: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -11,15 +19,120 @@ describe('OrderController', () => {
       providers: [
         {
           provide: OrderService,
-          useValue: {},
+          useValue: orderServiceMock,
         },
       ],
     }).compile();
 
     controller = module.get<OrderController>(OrderController);
+
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('should create an order', async () => {
+    const createOrderDto = {
+      customerId: 'customer-1',
+      items: [
+        {
+          menuItemId: 'menu-1',
+          quantity: 2,
+        },
+      ],
+    };
+
+    const order = {
+      id: 'order-1',
+      customerId: 'customer-1',
+      total: 398,
+    };
+
+    orderServiceMock.createOrder.mockResolvedValue(order);
+
+    const result = await controller.createOrder(createOrderDto);
+
+    expect(result).toEqual(order);
+
+    expect(orderServiceMock.createOrder).toHaveBeenCalledWith(createOrderDto);
+  });
+
+  it('should return an order by id', async () => {
+    const order = {
+      id: 'order-1',
+      customerId: 'customer-1',
+      total: 398,
+    };
+
+    orderServiceMock.getOrderById.mockResolvedValue(order);
+
+    const result = await controller.getOrderById('order-1');
+
+    expect(result).toEqual(order);
+
+    expect(orderServiceMock.getOrderById).toHaveBeenCalledWith('order-1');
+  });
+
+  it('should return orders with pagination and filters', async () => {
+    const getOrdersDto = {
+      page: 2,
+      limit: 10,
+      customerId: 'customer-1',
+      status: OrderStatus.CONFIRMED,
+    };
+
+    const ordersResponse = {
+      data: [
+        {
+          id: 'order-1',
+          customerId: 'customer-1',
+          status: OrderStatus.CONFIRMED,
+          total: 398,
+        },
+      ],
+      pagination: {
+        page: 2,
+        limit: 10,
+        total: 15,
+        totalPages: 2,
+      },
+    };
+
+    orderServiceMock.getOrders.mockResolvedValue(ordersResponse);
+
+    const result = await controller.getOrders(getOrdersDto);
+
+    expect(result).toEqual(ordersResponse);
+
+    expect(orderServiceMock.getOrders).toHaveBeenCalledWith(getOrdersDto);
+  });
+
+  it('should update an order status', async () => {
+    const updateOrderStatusDto = {
+      status: OrderStatus.CONFIRMED,
+    };
+
+    const updatedOrder = {
+      id: 'order-1',
+      customerId: 'customer-1',
+      status: OrderStatus.CONFIRMED,
+      total: 398,
+    };
+
+    orderServiceMock.updateOrderStatus.mockResolvedValue(updatedOrder);
+
+    const result = await controller.updateOrderStatus(
+      'order-1',
+      updateOrderStatusDto,
+    );
+
+    expect(result).toEqual(updatedOrder);
+
+    expect(orderServiceMock.updateOrderStatus).toHaveBeenCalledWith(
+      'order-1',
+      updateOrderStatusDto,
+    );
   });
 });
