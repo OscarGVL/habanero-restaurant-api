@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -22,10 +23,10 @@ const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
 export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createOrder(createOrderDto: CreateOrderDto) {
+  async createOrder(customerId: string, createOrderDto: CreateOrderDto) {
     const customer = await this.prisma.customer.findUnique({
       where: {
-        id: createOrderDto.customerId,
+        id: customerId,
       },
     });
 
@@ -73,7 +74,7 @@ export class OrderService {
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
-          customerId: createOrderDto.customerId,
+          customerId,
           total,
         },
       });
@@ -123,6 +124,31 @@ export class OrderService {
     return order;
   }
 
+  async getCustomerOrderById(id: string, customerId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        items: {
+          include: {
+            menuItem: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.customerId !== customerId) {
+      throw new ForbiddenException('You are not allowed to access this order');
+    }
+
+    return order;
+  }
+
   async getOrders(getOrdersDto: GetOrdersDto) {
     const { page, limit, customerId, status } = getOrdersDto;
     const skip = (page - 1) * limit;
@@ -162,6 +188,13 @@ export class OrderService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async getCustomerOrders(customerId: string, getOrdersDto: GetOrdersDto) {
+    return this.getOrders({
+      ...getOrdersDto,
+      customerId,
+    });
   }
 
   async updateOrderStatus(

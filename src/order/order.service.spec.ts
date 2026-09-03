@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrderStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -90,17 +94,32 @@ describe('OrderService', () => {
       const txOrderFindUnique = jest.fn().mockResolvedValue(finalOrder);
 
       prismaMock.$transaction.mockImplementation(
-        (callback: (tx: typeof tx) => Promise<unknown>) => {
+        async (
+          callback: (tx: {
+            order: {
+              create: typeof txOrderCreate;
+              findUnique: typeof txOrderFindUnique;
+            };
+            orderItem: {
+              create: typeof txOrderItemCreate;
+            };
+          }) => Promise<unknown>,
+        ) => {
           const tx = {
-            order: { create: txOrderCreate, findUnique: txOrderFindUnique },
-            orderItem: { create: txOrderItemCreate },
+            order: {
+              create: txOrderCreate,
+              findUnique: txOrderFindUnique,
+            },
+            orderItem: {
+              create: txOrderItemCreate,
+            },
           };
+
           return callback(tx);
         },
       );
 
-      const result = await service.createOrder({
-        customerId: 'customer-1',
+      const result = await service.createOrder('customer-1', {
         items: [
           {
             menuItemId: 'menu-1',
@@ -147,8 +166,7 @@ describe('OrderService', () => {
       prismaMock.customer.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.createOrder({
-          customerId: 'missing-customer',
+        service.createOrder('missing-customer', {
           items: [
             {
               menuItemId: 'menu-1',
@@ -176,8 +194,7 @@ describe('OrderService', () => {
       prismaMock.menuItem.findMany.mockResolvedValue([]);
 
       await expect(
-        service.createOrder({
-          customerId: 'customer-1',
+        service.createOrder('customer-1', {
           items: [
             {
               menuItemId: 'missing-menu-item',
@@ -215,8 +232,7 @@ describe('OrderService', () => {
       ]);
 
       await expect(
-        service.createOrder({
-          customerId: 'customer-1',
+        service.createOrder('customer-1', {
           items: [
             {
               menuItemId: 'menu-1',
@@ -302,8 +318,7 @@ describe('OrderService', () => {
         },
       );
 
-      const result = await service.createOrder({
-        customerId: 'customer-1',
+      const result = await service.createOrder('customer-1', {
         items: [
           {
             menuItemId: 'menu-1',
@@ -402,6 +417,120 @@ describe('OrderService', () => {
       expect(prismaMock.order.findUnique).toHaveBeenCalledWith({
         where: {
           id: 'missing-order',
+        },
+        include: {
+          items: {
+            include: {
+              menuItem: true,
+            },
+          },
+        },
+      });
+    });
+  });
+
+  describe('getCustomerOrderById', () => {
+    it('should return an order with its items and menu items', async () => {
+      const order = {
+        id: 'order-1',
+        customerId: 'customer-1',
+        status: OrderStatus.PENDING,
+        total: 398,
+        items: [
+          {
+            id: 'order-item-1',
+            orderId: 'order-1',
+            menuItemId: 'menu-1',
+            quantity: 2,
+            unitPrice: 199,
+            menuItem: {
+              id: 'menu-1',
+              name: 'Burger',
+              price: 199,
+              available: true,
+              deletedAt: null,
+            },
+          },
+        ],
+      };
+
+      prismaMock.order.findUnique.mockResolvedValue(order);
+
+      const result = await service.getCustomerOrderById(
+        'order-1',
+        'customer-1',
+      );
+
+      expect(result).toEqual(order);
+
+      expect(prismaMock.order.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: 'order-1',
+        },
+        include: {
+          items: {
+            include: {
+              menuItem: true,
+            },
+          },
+        },
+      });
+    });
+
+    it('should throw when the order does not exist', async () => {
+      prismaMock.order.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getCustomerOrderById('missing-order', 'customer-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prismaMock.order.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: 'missing-order',
+        },
+        include: {
+          items: {
+            include: {
+              menuItem: true,
+            },
+          },
+        },
+      });
+    });
+
+    it('should throw when the customer does not own the order', async () => {
+      const order = {
+        id: 'order-1',
+        customerId: 'customer-1',
+        status: OrderStatus.PENDING,
+        total: 398,
+        items: [
+          {
+            id: 'order-item-1',
+            orderId: 'order-1',
+            menuItemId: 'menu-1',
+            quantity: 2,
+            unitPrice: 199,
+            menuItem: {
+              id: 'menu-1',
+              name: 'Burger',
+              price: 199,
+              available: true,
+              deletedAt: null,
+            },
+          },
+        ],
+      };
+
+      prismaMock.order.findUnique.mockResolvedValue(order);
+
+      await expect(
+        service.getCustomerOrderById('order-1', 'customer-2'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(prismaMock.order.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: 'order-1',
         },
         include: {
           items: {
@@ -575,6 +704,47 @@ describe('OrderService', () => {
 
       expect(prismaMock.order.count).toHaveBeenCalledWith({
         where: {},
+      });
+    });
+  });
+
+  describe('getCustomerOrders', () => {
+    it('should return orders for the authenticated customer', async () => {
+      const getOrdersDto = {
+        page: 1,
+        limit: 10,
+      };
+
+      const ordersResponse = {
+        data: [
+          {
+            id: 'order-1',
+            customerId: 'customer-1',
+            total: 398,
+          },
+        ],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 1,
+          totalPages: 1,
+        },
+      };
+
+      const getOrdersSpy = jest
+        .spyOn(service, 'getOrders')
+        .mockResolvedValue(ordersResponse as never);
+
+      const result = await service.getCustomerOrders(
+        'customer-1',
+        getOrdersDto,
+      );
+
+      expect(result).toEqual(ordersResponse);
+
+      expect(getOrdersSpy).toHaveBeenCalledWith({
+        ...getOrdersDto,
+        customerId: 'customer-1',
       });
     });
   });
