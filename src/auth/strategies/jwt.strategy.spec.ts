@@ -44,6 +44,7 @@ describe('JwtStrategy', () => {
     expect(result).toEqual({
       customerId: 'customer-1',
       email: 'customer@example.com',
+      role: UserRole.CUSTOMER,
     });
   });
 });

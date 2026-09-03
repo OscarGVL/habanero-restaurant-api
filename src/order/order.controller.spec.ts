@@ -221,10 +221,11 @@ describe('OrderController', () => {
   it('should require the STAFF role to update an order status', () => {
     const reflector = new Reflector();
 
-    const requiredRoles = reflector.getAllAndOverride<UserRole[]>('roles', [
-      controller.updateOrderStatus,
-      OrderController,
-    ]);
+    const requiredRoles = reflector.getAllAndOverride<UserRole[]>(
+      'roles',
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      [OrderController.prototype.updateOrderStatus, OrderController],
+    );
 
     expect(requiredRoles).toEqual([UserRole.STAFF]);
   });
