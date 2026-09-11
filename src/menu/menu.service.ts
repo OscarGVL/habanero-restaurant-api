@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+import { Prisma } from '../../generated/prisma/client';
 
 @Injectable()
 export class MenuService {
@@ -41,9 +42,7 @@ export class MenuService {
       });
     } catch (error) {
       if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         throw new ConflictException('Menu item name already exists');

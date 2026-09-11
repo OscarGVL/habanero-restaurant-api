@@ -4,6 +4,38 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
+interface CustomerResponse {
+  id: string;
+  email: string;
+  name: string;
+}
+
+interface LoginResponse {
+  accessToken: string;
+}
+
+interface MenuItemResponse {
+  id: string;
+  name: string;
+  description: string;
+  price: string | number;
+  available: boolean;
+}
+
+interface OrderItemResponse {
+  menuItemId: string;
+  quantity: number;
+  unitPrice: string | number;
+}
+
+interface OrderResponse {
+  id: string;
+  customerId: string;
+  status: string;
+  total: string | number;
+  items: OrderItemResponse[];
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -41,13 +73,15 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    expect(response.body).toMatchObject({
+    const menuItem = response.body as MenuItemResponse;
+
+    expect(menuItem).toMatchObject({
       name,
       description: 'A burger created by an E2E test',
-      price: expect.anything(),
     });
 
-    expect(response.body.id).toEqual(expect.any(String));
+    expect(menuItem.id).toEqual(expect.any(String));
+    expect(Number(menuItem.price)).toBe(12.99);
   });
 
   it('/api/menu (POST) - rejects a negative price', () => {
@@ -121,7 +155,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const id = createResponse.body.id;
+    const createdMenuItem = createResponse.body as MenuItemResponse;
+    const id = createdMenuItem.id;
 
     const response = await request(app.getHttpServer())
       .get(`/api/menu/${id}`)
@@ -159,7 +194,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const id = createResponse.body.id;
+    const createdMenuItem = createResponse.body as MenuItemResponse;
+    const id = createdMenuItem.id;
 
     const response = await request(app.getHttpServer())
       .patch(`/api/menu/${id}`)
@@ -204,7 +240,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const id = createResponse.body.id;
+    const createdMenuItem = createResponse.body as MenuItemResponse;
+    const id = createdMenuItem.id;
 
     await request(app.getHttpServer()).delete(`/api/menu/${id}`).expect(200);
 
@@ -238,7 +275,9 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    expect(customerResponse.body).toMatchObject({
+    const customer = customerResponse.body as CustomerResponse;
+
+    expect(customer).toMatchObject({
       email,
       name: 'E2E Customer',
     });
@@ -252,7 +291,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const accessToken = loginResponse.body.accessToken;
+    const login = loginResponse.body as LoginResponse;
+    const accessToken = login.accessToken;
 
     expect(accessToken).toEqual(expect.any(String));
 
@@ -266,7 +306,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const menuItemId = menuItemResponse.body.id;
+    const menuItem = menuItemResponse.body as MenuItemResponse;
+    const menuItemId = menuItem.id;
 
     expect(menuItemId).toEqual(expect.any(String));
 
@@ -284,21 +325,23 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
+    const order = orderResponse.body as OrderResponse;
+
     // 5. Verify the order
-    expect(orderResponse.body).toMatchObject({
-      customerId: customerResponse.body.id,
+    expect(order).toMatchObject({
+      customerId: customer.id,
       status: 'PENDING',
     });
 
-    expect(orderResponse.body.items).toHaveLength(1);
+    expect(order.items).toHaveLength(1);
 
-    expect(orderResponse.body.items[0]).toMatchObject({
+    expect(order.items[0]).toMatchObject({
       menuItemId,
       quantity: 2,
     });
 
-    expect(Number(orderResponse.body.items[0].unitPrice)).toBe(12.5);
-    expect(Number(orderResponse.body.total)).toBe(25);
+    expect(Number(order.items[0].unitPrice)).toBe(12.5);
+    expect(Number(order.total)).toBe(25);
   });
 
   it('should reject unauthenticated order creation', async () => {
@@ -331,7 +374,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const accessToken = loginResponse.body.accessToken;
+    const login = loginResponse.body as LoginResponse;
+    const accessToken = login.accessToken;
 
     await request(app.getHttpServer())
       .post('/api/orders')
@@ -368,7 +412,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const accessToken = loginResponse.body.accessToken;
+    const login = loginResponse.body as LoginResponse;
+    const accessToken = login.accessToken;
 
     const menuItemResponse = await request(app.getHttpServer())
       .post('/api/menu')
@@ -379,8 +424,11 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
+    const menuItem = menuItemResponse.body as MenuItemResponse;
+    const menuItemId = menuItem.id;
+
     await request(app.getHttpServer())
-      .patch(`/api/menu/${menuItemResponse.body.id}`)
+      .patch(`/api/menu/${menuItemId}`)
       .send({
         available: false,
       })
@@ -392,7 +440,7 @@ describe('AppController (e2e)', () => {
       .send({
         items: [
           {
-            menuItemId: menuItemResponse.body.id,
+            menuItemId,
             quantity: 1,
           },
         ],
@@ -434,6 +482,9 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
+    const loginA = loginAResponse.body as LoginResponse;
+    const accessTokenA = loginA.accessToken;
+
     // Create a menu item
     const menuItemResponse = await request(app.getHttpServer())
       .post('/api/menu')
@@ -444,19 +495,24 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
+    const menuItem = menuItemResponse.body as MenuItemResponse;
+    const menuItemId = menuItem.id;
+
     // Create an order belonging to Customer A
     const orderResponse = await request(app.getHttpServer())
       .post('/api/orders')
-      .set('Authorization', `Bearer ${loginAResponse.body.accessToken}`)
+      .set('Authorization', `Bearer ${accessTokenA}`)
       .send({
         items: [
           {
-            menuItemId: menuItemResponse.body.id,
+            menuItemId,
             quantity: 1,
           },
         ],
       })
       .expect(201);
+
+    const order = orderResponse.body as OrderResponse;
 
     // Log in as Customer B
     const loginBResponse = await request(app.getHttpServer())
@@ -467,10 +523,13 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
+    const loginB = loginBResponse.body as LoginResponse;
+    const accessTokenB = loginB.accessToken;
+
     // Customer B attempts to access Customer A's order
     await request(app.getHttpServer())
-      .get(`/api/orders/customers/me/orders/${orderResponse.body.id}`)
-      .set('Authorization', `Bearer ${loginBResponse.body.accessToken}`)
+      .get(`/api/orders/customers/me/orders/${order.id}`)
+      .set('Authorization', `Bearer ${accessTokenB}`)
       .expect(403);
   });
 
@@ -496,7 +555,8 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
-    const accessToken = loginResponse.body.accessToken;
+    const login = loginResponse.body as LoginResponse;
+    const accessToken = login.accessToken;
 
     // Create menu item
     const menuItemResponse = await request(app.getHttpServer())
@@ -508,6 +568,9 @@ describe('AppController (e2e)', () => {
       })
       .expect(201);
 
+    const menuItem = menuItemResponse.body as MenuItemResponse;
+    const menuItemId = menuItem.id;
+
     // Create order as the customer
     const orderResponse = await request(app.getHttpServer())
       .post('/api/orders')
@@ -515,16 +578,18 @@ describe('AppController (e2e)', () => {
       .send({
         items: [
           {
-            menuItemId: menuItemResponse.body.id,
+            menuItemId,
             quantity: 1,
           },
         ],
       })
       .expect(201);
 
+    const order = orderResponse.body as OrderResponse;
+
     // Customer attempts to change the order status
     await request(app.getHttpServer())
-      .patch(`/api/orders/${orderResponse.body.id}/status`)
+      .patch(`/api/orders/${order.id}/status`)
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         status: 'CONFIRMED',
@@ -533,10 +598,12 @@ describe('AppController (e2e)', () => {
 
     // Verify the order is still PENDING
     const orderCheck = await request(app.getHttpServer())
-      .get(`/api/orders/${orderResponse.body.id}`)
+      .get(`/api/orders/${order.id}`)
       .expect(200);
 
-    expect(orderCheck.body.status).toBe('PENDING');
+    const orderCheckBody = orderCheck.body as OrderResponse;
+
+    expect(orderCheckBody.status).toBe('PENDING');
   });
 
   afterEach(async () => {
