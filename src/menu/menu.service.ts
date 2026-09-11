@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+import { Prisma } from '../../generated/prisma/client';
 
 @Injectable()
 export class MenuService {
@@ -31,9 +36,20 @@ export class MenuService {
   }
 
   async createMenuItem(createMenuItemDto: CreateMenuItemDto) {
-    return this.prisma.menuItem.create({
-      data: createMenuItemDto,
-    });
+    try {
+      return await this.prisma.menuItem.create({
+        data: createMenuItemDto,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Menu item name already exists');
+      }
+
+      throw error;
+    }
   }
 
   async updateMenuItem(id: string, updateMenuItemDto: UpdateMenuItemDto) {
