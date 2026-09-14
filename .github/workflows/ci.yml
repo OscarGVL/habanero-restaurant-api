@@ -9,6 +9,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: habanero_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d habanero_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,6 +42,13 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          PORT: 3001
+          JWT_SECRET: test-secret
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/habanero_test
 
       - name: Run lint
         run: npm run lint
