@@ -44,7 +44,8 @@ jobs:
         run: npm test
 
       - name: Create E2E environment file
-        run: cat <<EOF > .env.test
+        run: |
+          cat <<EOF > .env.test
           PORT=3001
           JWT_SECRET=test-secret
           DATABASE_URL=postgresql://postgres:postgres@localhost:5432/habanero_test
