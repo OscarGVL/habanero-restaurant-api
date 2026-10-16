@@ -1,0 +1,75 @@
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+# Avoid overlapping production deployments.
+concurrency:
+  group: habanero-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: habanero_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d habanero_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Create E2E environment file
+        run: |
+          cat <<EOF > .env.test
+          PORT=3001
+          JWT_SECRET=test-secret
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/habanero_test
+          EOF
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run production database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+
+      - name: Trigger Render deployment
+        run: curl --fail --silent --show-error "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
